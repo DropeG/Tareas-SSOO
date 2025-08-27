@@ -10,10 +10,10 @@
 typedef struct  {
     pid_t pid;  // PID del proceso
     char name[128]; // Nombre del proceso
-    int status; // Estado del proceso
+    int status; // Estado del proceso (0: running, 1: stopped, 2: terminated)
     time_t start_time; // Tiempo de inicio del proceso
-    time_t end_time; // Tiempo de fin del proceso
-    int is_running; // Indica si el proceso está en ejecución
+    int exit_code;
+    int signal_received;
 } ProcessInfo;
 
 extern ProcessInfo processes[MAX_PROCESSES];
