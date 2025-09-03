@@ -24,27 +24,30 @@ int shutdown_duration = 10;
 
 int contador = 0;
 
+void print_table_header(void) {
+  printf("%-6s %-20s %-10s %-8s %-8s\n",
+         "PID", "Nombre", "Tiempo", "Exit", "Signal");
+}
+
 void print_final_statistics() {
   printf("DCControl finalizado.\n");
-  printf("PID\tNombre\t\tTiempo\t\tExit Code\tSignal\n");
-  
+  print_table_header();
+
   for (int i = 0; i < process_count; i++) {
-      time_t execution_time;
-      
-      if (processes[i].status == 0) {
-          // Proceso aún ejecutándose
-          execution_time = time(NULL) - processes[i].start_time;
-      } else {
-          // Proceso terminado
-          execution_time = processes[i].end_time - processes[i].start_time;
-      }
-      
-      printf("%d\t%s\t\t%lds\t\t%d\t\t%d\n", 
-          processes[i].pid, 
-          processes[i].name, 
-          execution_time,
-          processes[i].exit_code,
-          processes[i].signal_received);
+    time_t execution_time;
+
+    if (processes[i].status == 0) {
+      execution_time = time(NULL) - processes[i].start_time;
+    } else {
+      execution_time = processes[i].end_time - processes[i].start_time;
+    }
+
+    printf("%-6d %-20s %-10lds %-8d %-8d\n",
+           processes[i].pid,
+           processes[i].name,
+           execution_time,
+           processes[i].exit_code,
+           processes[i].signal_received);
   }
 }
 
@@ -59,9 +62,10 @@ void timer_handler(int sig) {
 void signal_handler(int sig) {
   if (sig == SIGCHLD) {
     int status;
-    pid_t pid = waitpid(-1, &status, WNOHANG);
+    pid_t pid;
 
-    if (pid > 0) {
+    
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
       for (int i = 0; i<process_count; i++) {
         if (processes[i].pid == pid) {
           processes[i].end_time = time(NULL);
@@ -120,7 +124,7 @@ void check_process_timeouts() {
       printf("🔍 Abort completado. Verificando procesos...\n");
 
       printf("Abort cumplido.\n");
-      printf("PID\tNombre\t\tTiempo\t\tExit Code\tSignal\n");
+      print_table_header();
 
       for (int i = 0; i < process_count; i++) {
         if (processes[i].status == 0) {
@@ -185,21 +189,14 @@ void setup_timer() {
     return;
   }
 
-  printf("⏰ Configurando timer para verificar cada 1 segundo...\n");
-
   struct itimerval timer;
   timer.it_interval.tv_sec = 1;
   timer.it_interval.tv_usec =0;
   timer.it_value.tv_sec = 1;
   timer.it_value.tv_usec = 0;
 
-  if (setitimer(ITIMER_REAL, &timer, NULL) == 0) {
-    printf("   ✅ Timer configurado correctamente\n");
-  } else {
-    printf("   ❌ Error al configurar el timer\n");
-    perror("   setitimer");
-    return;
-  }
+  setitimer(ITIMER_REAL, &timer, NULL);
+
 }
 
 static bool string_equals(char *string1, char *string2) { 
@@ -218,13 +215,14 @@ void launch_process(char *executable, char **args) {
     perror("Error al ejecutar el proceso");
     exit(1);
   } else if (pid > 0) { // Padre 
+    // ✅ El proceso se ejecutó correctamente
     processes[process_count].pid = pid;
     strcpy(processes[process_count].name, executable);
     processes[process_count].start_time = time(NULL);
     processes[process_count].status = 0;
     processes[process_count].timeout_start = 0;
-    processes[process_count].exit_code = 0;
-    processes[process_count].signal_received = 0;
+    processes[process_count].exit_code = -1;
+    processes[process_count].signal_received = -1;
     processes[process_count].end_time = 0;
     process_count++;
     printf("✅ Proceso %s lanzado con PID %d (start_time: %ld)\n", 
@@ -235,7 +233,7 @@ void launch_process(char *executable, char **args) {
 }
 
 void show_status() {
-  printf("PID\tNombre\t\t\tTiempo\t\tExit Code\tSignal\n");
+  print_table_header();
   for (int i = 0; i < process_count; i++) {
     time_t execution_time;
 
@@ -244,10 +242,11 @@ void show_status() {
     } else {
       execution_time = processes[i].end_time - processes[i].start_time;
     }
-    printf("%d\t%s\t\t\t%lds\t\t%d\t\t%d\n", 
-      processes[i].pid, 
-      processes[i].name, 
+    printf("%-6d %-20s %ld%-9s %-8d %-8d\n",
+      processes[i].pid,
+      processes[i].name,
       execution_time,
+      "s",
       processes[i].exit_code,
       processes[i].signal_received);
   }
@@ -292,7 +291,6 @@ void shotdown_process() {
   printf("📊 Procesos en ejecución encontrados: %d\n", running_processes);
 
   if (running_processes == 0) {
-    printf("❌ No hay procesos en ejecución. SHUTDOWN no se puede ejecutar.\n");
     print_final_statistics();
     exit(0);
   }
@@ -319,7 +317,35 @@ void shotdown_process() {
   
 }
 
+void emergency_process() {
+  printf("¡Emergencia!\n");
 
+  int running_processes = 0;
+  for (int i = 0; i < process_count; i++) {
+    if (processes[i].status == 0) {
+      running_processes++;
+    }
+  }
+
+  printf("📊 Procesos en ejecución encontrados: %d\n", running_processes);
+
+  if (running_processes == 0) {
+    printf("✅ No hay procesos en ejecución.\n");
+  } else {
+    printf("⚠️ Enviando SIGKILL a todos los procesos...\n");
+
+    for (int i = 0; i < process_count; i++) {
+      if (processes[i].status == 0) {
+        printf(" Enviando SIGKILL a PID %d (%s)\n", processes[i].pid, processes[i].name);
+        kill(processes[i].pid, SIGKILL);
+        processes[i].status = 4; // force_terminated
+      }
+    }
+  }
+
+  print_final_statistics();
+  exit(0);
+}
 
 int main(int argc, char const *argv[])
 {
@@ -352,7 +378,7 @@ int main(int argc, char const *argv[])
       if (input[1] != NULL) {
         launch_process(input[1], &input[1]);
       } else {
-        printf("❌ ERROR: Debe especificar el nombre del proceso\n");
+        printf("❌ ERROR: Debe especificar el nombre del comando\n");
       }
     } else if (string_equals(input[0], "status")) {
       show_status();
@@ -372,7 +398,7 @@ int main(int argc, char const *argv[])
     } else if (string_equals(input[0], "shutdown")) {
       shotdown_process();
     } else if (string_equals(input[0], "emergency")) {
-      printf("COMANDO EMERGENCY\n");
+      emergency_process();
     } else if (string_equals(input[0], "exit")) {
       printf("COMANDO EXIT\n");
       free_user_input(input);
