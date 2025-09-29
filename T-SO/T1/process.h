@@ -2,11 +2,12 @@
 #define PROCESS_H
 
 typedef enum {
-     RUNNING,
-     READY,
-     WAITING,
-     FINISHED,
-     DEAD
+    NEW,
+    RUNNING,
+    READY,
+    WAITING,
+    FINISHED,
+    DEAD
 } State;
 
 typedef struct {

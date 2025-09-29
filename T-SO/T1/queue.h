@@ -15,5 +15,7 @@ void enqueue(Cola* q, Process* p);
 Process* dequeue(Cola* q);
 void remove_process(Cola* q, Process* p);
 void sort_by_priority(Cola* q);
+int is_in_queue(Cola* q, Process* p);
+void print_queue_names(Cola* q);
 
 #endif

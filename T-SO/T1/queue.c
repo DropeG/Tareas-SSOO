@@ -59,17 +59,35 @@ void remove_process(Cola* q, Process* p) {
 }
 
 void sort_by_priority(Cola* q) {
-    // Ordenar procesos por prioridad (bursts_done, deadline, start_time)
     for (int i = 0; i < q->count - 1; i++) {
         for (int j = i+1; j < q->count; j++) {
             Process* a = q->processes[i];
             Process* b = q->processes[j];
-            // comparar prioridades
-            if (a->priority > b->priority || (a->priority == b->priority && a->pid > b->pid)) {
+            
+            // Intercambiar si b debe ir antes que a
+            if (b->priority > a->priority || 
+                (a->priority == b->priority && b->pid < a->pid)) {
                 Process* tmp = q->processes[i];
-                q->processes[i] = q-> processes[j];
+                q->processes[i] = q->processes[j];
                 q->processes[j] = tmp;
             }
         }
     }
+}
+
+int is_in_queue(Cola* q, Process* p) {
+    for (int i = 0; i < q->count; i++) {
+        if (q->processes[i] == p) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void print_queue_names(Cola* q) {
+    printf("[ ");
+    for (int i = 0; i < q->count; i++) {
+        printf("%s ", q->processes[i]->name);
+    }
+    printf("]\n");
 }

@@ -31,7 +31,7 @@ void parse_input(const char* filename, int* q, int * K, int* N,
             exit(1);
         }
         // inicializar otros campos
-        p.state = READY;
+        p.state = NEW;
         p.bursts_done = 0;
         p.last_cpu_exit = -1;
         p.priority = 0.0;
@@ -40,7 +40,6 @@ void parse_input(const char* filename, int* q, int * K, int* N,
         p.finish_time = -1;
         p.waiting_time = 0;
         p.quantum_used = 0;
-
         p.burst_remaining = p.burst_time;
         p.io_remaining = 0;
 

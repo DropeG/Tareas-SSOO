@@ -1,6 +1,9 @@
-2
-2
+7
+4
 1
-P0 0 0 3 1 0 20
-P1 1 0 2 1 0 20
-1 2
+nombre, pid, t_inicio, t_cpu_burst, n_bursts, io_wait, t_deadline
+PROCESS_0 0 0 1 2 1 26
+PROCESS_1 1 0 1 2 1 26
+PROCESS_2 2 0 2 2 1 24
+PROCESS_3 3 0 2 2 1 24
+3 15
