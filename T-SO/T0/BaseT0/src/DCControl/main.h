@@ -18,8 +18,10 @@ typedef struct {
     int signal_received;
 } ProcessInfo;
 
-extern ProcessInfo processes[MAX_PROCESSES];
+extern ProcessInfo *processes;
+extern int process_capacity;
 extern int process_count;
+extern int active_count;
 
 void launch_process(char *executable, char **args);
 void show_status(void);
