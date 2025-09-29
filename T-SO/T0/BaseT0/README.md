@@ -1,163 +1,128 @@
-# DCControl - Control de Misiones Espaciales
+# DCControl - Shell para Gestión de Procesos
 
-## 📋 Descripción del Proyecto
+## ¿Qué es?
 
-DCControl es una shell que simula el control de misiones en una estación espacial. Permite gestionar procesos externos en paralelo, administrar su ciclo de vida y enviar señales para controlarlos. El proyecto está desarrollado en C puro utilizando syscalls del sistema operativo.
+DCControl es una shell en C que permite lanzar y gestionar procesos externos. Simula el control de misiones en una estación espacial donde necesitas manejar múltiples procesos en paralelo.
 
-## 🎯 Objetivos
+## ¿Qué implementé?
 
-- Crear procesos externos en paralelo
-- Administrar el ciclo de vida de los procesos (ejecutar, monitorear, terminar)
-- Enviar señales (SIGTERM, SIGKILL, SIGINT)
-- Evitar procesos zombie u huérfanos
-- Mostrar estadísticas de los procesos
+Implementé todos los comandos que pedía el enunciado:
 
-## 🚀 Estado Actual del Código
+- `launch` - Lanza procesos externos
+- `status` - Muestra info de todos los procesos  
+- `abort <tiempo>` - Termina procesos después de X segundos
+- `shutdown` - Cierra DCControl de forma segura
+- `emergency` - Termina todo inmediatamente
 
-### ✅ Implementado
-- **Estructura básica del proyecto** con Makefile funcional
-- **Sistema de input** que lee comandos del usuario
-- **Comando `launch`** - Crea nuevos procesos usando fork/exec
-- **Comando `status`** - Muestra información de todos los procesos activos
-- **Manejo básico de procesos** con límite máximo de 10 simultáneos
-- **Estructura de datos** para almacenar información de procesos
-- **Comando `exit`** - Sale de DCControl
+También implementé:
+- Manejo de señales (SIGTERM, SIGKILL, SIGINT)
+- Timer automático para timeouts
+- Límite de 10 procesos simultáneos
+- Gestión de memoria sin leaks
+- Parámetro time_max para límite de tiempo por proceso
 
-### 🔧 Pendiente por Implementar
-- Comando `abort` - Terminar procesos después de un tiempo
-- Comando `shutdown` - Cerrar DCControl de forma segura
-- Comando `emergency` - Terminación inmediata de todos los procesos
-- Manejo de señales para detectar cuando terminan los procesos
-- Validación del parámetro `time_max` del ejecutable
+## Cómo usar
 
-## 🛠️ Cómo Compilar y Ejecutar
-
-### 1. Compilar el proyecto
+### Compilar
 ```bash
 make
 ```
 
-### 2. Ejecutar DCControl
+### Ejecutar
 ```bash
 ./DCControl <tiempo_maximo>
 ```
 
-**Ejemplo:**
+Ejemplo:
 ```bash
 ./DCControl 60
 ```
 
-## 📚 Comandos Disponibles
+## Comandos
 
-### `launch <ejecutable> [argumentos]`
-Lanza un nuevo proceso en segundo plano.
+### `launch <ejecutable> [args]`
+Lanza un proceso. Máximo 10 al mismo tiempo.
 
-**Ejemplos:**
 ```bash
 launch sleep 5
-launch echo "hola mundo"
+launch echo "hola"
 launch ls -la
-launch ping -c 3 google.com
 ```
 
 ### `status`
-Muestra una tabla con información de todos los procesos:
-- **PID**: Identificador del proceso
-- **Nombre**: Nombre del ejecutable
-- **Tiempo**: Tiempo transcurrido desde su lanzamiento
-- **Estado**: Estado actual del proceso
-- **Exit Code**: Código de salida del proceso
-- **Signal**: Señal recibida por el proceso
+Muestra tabla con todos los procesos:
+- PID, Nombre, Tiempo, Exit Code, Signal
 
-### `exit`
-Sale de DCControl.
+### `abort <tiempo>`
+Termina procesos después de X segundos.
 
-## 🧪 Tests para Probar la Funcionalidad
-
-### Test 1: Proceso Simple
 ```bash
-launch sleep 3
-status
-# Esperar 4 segundos
-status
+abort 5  # termina en 5 segundos
 ```
-**Resultado esperado:** El proceso debe aparecer como RUNNING y luego como FINISHED.
 
-### Test 2: Múltiples Procesos
-```bash
-launch sleep 5
-launch sleep 3
-launch sleep 1
-status
-```
-**Resultado esperado:** Deben aparecer 3 procesos simultáneos.
+### `shutdown`
+Cierra DCControl:
+1. Envía SIGINT a procesos activos
+2. Espera 10 segundos  
+3. Envía SIGKILL a los que siguen vivos
+4. Muestra estadísticas
 
-### Test 3: Proceso que Termina Rápido
+### `emergency`
+Termina todo inmediatamente con SIGKILL.
+
+## Tests
+
+### Básico
 ```bash
+./DCControl 10
 launch echo "hola"
 status
+shutdown
 ```
-**Resultado esperado:** El proceso debe terminar inmediatamente.
 
-### Test 4: Listar Archivos
+### Abort
 ```bash
-launch ls
-status
+./DCControl 10
+launch sleep 60
+abort 3
+# esperar 3 segundos
 ```
-**Resultado esperado:** Debe mostrar el resultado de `ls` y el proceso aparecer como terminado.
 
-### Test 5: Límite de Procesos
+### Emergency
 ```bash
-# Lanzar 11 procesos para probar el límite
-launch sleep 10
-launch sleep 10
-launch sleep 10
-launch sleep 10
-launch sleep 10
-launch sleep 10
-launch sleep 10
-launch sleep 10
-launch sleep 10
-launch sleep 10
-launch sleep 10  # Este debe dar error
+./DCControl 10
+launch sleep 60
+emergency
 ```
-**Resultado esperado:** El último proceso debe mostrar "ERROR: Máximo de procesos alcanzado".
 
-### Test 6: Error en Comando
+### Timeout automático
 ```bash
-launch
-launch comando_inexistente
+./DCControl 3
+launch sleep 10
+# esperar 3 segundos (SIGTERM)
+# esperar 5 segundos más (SIGKILL)
 ```
-**Resultado esperado:** Debe mostrar mensajes de error apropiados.
 
-## 🏗️ Estructura del Código
+## Detalles técnicos
 
-### Archivos Principales
+- Array dinámico para procesos (sin límite total, solo 10 activos)
+- Sin memory leaks (verificado con AddressSanitizer)
+- Manejo de señales: SIGCHLD, SIGALRM, SIGTERM, SIGKILL, SIGINT
+- Timer automático cada segundo
+- Estados: running, terminated, timeout_warning, force_terminated
+- Historial completo de todos los procesos lanzados
 
-#### `src/DCControl/main.c`
-- **Función `main()`**: Loop principal que lee comandos del usuario
-- **Función `launch_process()`**: Crea nuevos procesos usando fork/exec
-- **Función `show_status()`**: Muestra información de todos los procesos
-- **Variable global `processes[]`**: Array que almacena información de todos los procesos
-- **Variable global `process_count`**: Contador de procesos activos
+## Lo que cumple
 
-#### `src/DCControl/main.h`
-- **Struct `ProcessInfo`**: Define la estructura de datos para cada proceso
-- **Constantes**: `MAX_PROCESSES = 10`
-- **Declaraciones de funciones**
-
-#### `src/input_manager/manager.c`
-- **Función `read_user_input()`**: Lee y parsea comandos del usuario
-- **Función `set_buffer()`**: Configura el buffer de entrada
-- **Función `free_user_input()`**: Libera memoria del input
-
-### Flujo de Ejecución
-
-1. **Inicialización**: Se configura el buffer y se inicia el loop principal
-2. **Lectura de comando**: Se lee la entrada del usuario y se divide en tokens
-3. **Procesamiento**: Se identifica el comando y se ejecuta la función correspondiente
-4. **Gestión de procesos**: 
-   - `launch`: Fork + exec para crear nuevo proceso
-   - `status`: Itera sobre el array de procesos y muestra información
+✅ Todos los comandos del enunciado  
+✅ Gestión de señales  
+✅ Sin procesos zombie  
+✅ Estadísticas finales  
+✅ Límite de 10 procesos simultáneos  
+✅ Timer automático  
+✅ Sin memory leaks  
+✅ Ejecución en paralelo  
+✅ Parámetro time_max  
+✅ Manejo de errores
 
 

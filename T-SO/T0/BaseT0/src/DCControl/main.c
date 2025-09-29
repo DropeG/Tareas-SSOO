@@ -9,9 +9,10 @@
 #include "main.h"
 #include <sys/time.h>
 
-
-ProcessInfo processes[MAX_PROCESSES];
+ProcessInfo *processes = NULL;
+int process_capacity = 0;
 int process_count = 0;
+int active_count = 0;
 int time_max_limit = -1; 
 
 int abort_active = 0;
@@ -23,6 +24,30 @@ time_t shutdown_start_time = 0;
 int shutdown_duration = 10; 
 
 int contador = 0;
+
+void cleanup() {
+  if (processes != NULL) {
+    free(processes);
+    processes = NULL;
+  }
+}
+
+void expand_process_array() {
+  if (process_count >= process_capacity) {
+    int new_cap = (process_capacity == 0) ? 10 : process_capacity * 2;
+
+    ProcessInfo *tmp = realloc(processes, new_cap * sizeof(ProcessInfo));
+    if (tmp == NULL) {
+      perror("realloc");       // imprime razón del fallo
+      free(processes);         // libera el bloque original para no filtrar
+      processes = NULL;
+      exit(1);
+    }
+
+    processes = tmp;
+    process_capacity = new_cap;
+  }
+}
 
 void print_table_header(void) {
   printf("%-6s %-20s %-10s %-8s %-8s\n",
@@ -42,10 +67,11 @@ void print_final_statistics() {
       execution_time = processes[i].end_time - processes[i].start_time;
     }
 
-    printf("%-6d %-20s %-10lds %-8d %-8d\n",
+    printf("%-6d %-20s %ld%-9s %-8d %-8d\n",
            processes[i].pid,
            processes[i].name,
            execution_time,
+           "s",
            processes[i].exit_code,
            processes[i].signal_received);
   }
@@ -81,6 +107,7 @@ void signal_handler(int sig) {
             printf("⚠️ Proceso %s (PID %d) terminó por señal %d\n", 
                                processes[i].name, pid, processes[i].signal_received);
           }
+          active_count--;
           break;
         }
       }
@@ -97,20 +124,20 @@ void check_process_timeouts() {
 
   if (shutdown_active) {
     time_t elapsed_shutdown = current_time - shutdown_start_time;
-    printf("🕐 Shutdown: %ld/%d segundos transcurridos\n", elapsed_shutdown, shutdown_duration);
 
     if (elapsed_shutdown >= shutdown_duration) {
-      printf("🔍 Shutdown completado. Verificando procesos...\n");
-
       for (int i = 0; i < process_count; i++) {
-        if (processes[i].status == 0) {
+        if (kill(processes[i].pid, 0) == 0) {
           printf("�� Enviando SIGKILL a PID %d (%s)\n", processes[i].pid, processes[i].name);
           kill(processes[i].pid, SIGKILL);
           processes[i].status = 4; // force_terminated
+          processes[i].end_time = time(NULL);
+          processes[i].signal_received = 9;
         }
       }
 
       print_final_statistics();
+      cleanup();
       exit(0);
     }
     return;
@@ -118,25 +145,22 @@ void check_process_timeouts() {
 
   if (abort_active) {
     time_t elapsed_abort = current_time - abort_start_time;
-    printf("🕐 Abort: %ld/%d segundos transcurridos\n", elapsed_abort, abort_duration);
 
     if (elapsed_abort >= abort_duration) {
-      printf("🔍 Abort completado. Verificando procesos...\n");
-
       printf("Abort cumplido.\n");
       print_table_header();
 
       for (int i = 0; i < process_count; i++) {
         if (processes[i].status == 0) {
           time_t execution_time = current_time - processes[i].start_time;
-          printf("%d\t%s\t\t%lds\t\t%d\t\t%d\n", 
-            processes[i].pid, 
-            processes[i].name, 
+          printf("%-6d %-20s %ld%-9s %-8d %-8d\n",
+            processes[i].pid,
+            processes[i].name,
             execution_time,
+            "s",
             processes[i].exit_code,
             processes[i].signal_received);
 
-          printf("�� Enviando SIGTERM a PID %d\n", processes[i].pid);
           kill(processes[i].pid, SIGTERM);
           processes[i].status = 3; // timeout_warning
           processes[i].timeout_start = current_time;
@@ -154,12 +178,11 @@ void check_process_timeouts() {
       time_t elapsed = current_time - processes[i].start_time;
     
       if (elapsed >= time_max_limit) {
-        printf("⚠️ Proceso %s ha superado el tiempo máximo de ejecución\n", processes[i].name);
         printf("⚠️ El proceso debe terminar en 5 segundos como maximo\n");
         kill(processes[i].pid, SIGTERM);
         processes[i].status = 3; // timeout_warning
         processes[i].timeout_start = current_time;
-        printf("   📤 Enviado SIGTERM a PID %d\n", processes[i].pid);
+        printf("   📤 Enviando SIGTERM a PID %d\n", processes[i].pid);
       }
     }
 
@@ -185,7 +208,6 @@ void check_process_timeouts() {
 
 void setup_timer() {
   if (time_max_limit == -1) {
-    printf("⏰ Timer deshabilitado (tiempo ilimitado)\n");
     return;
   }
 
@@ -204,10 +226,12 @@ static bool string_equals(char *string1, char *string2) {
 }
 
 void launch_process(char *executable, char **args) {
-  if (process_count >= MAX_PROCESSES) {
+  if (active_count >= MAX_PROCESSES) {
     printf("ERROR: Máximo de procesos alcanzado\n");
     return;
   }
+
+  expand_process_array();
 
   pid_t pid = fork();
   if (pid == 0) { // Hijo
@@ -215,7 +239,6 @@ void launch_process(char *executable, char **args) {
     perror("Error al ejecutar el proceso");
     exit(1);
   } else if (pid > 0) { // Padre 
-    // ✅ El proceso se ejecutó correctamente
     processes[process_count].pid = pid;
     strcpy(processes[process_count].name, executable);
     processes[process_count].start_time = time(NULL);
@@ -225,6 +248,7 @@ void launch_process(char *executable, char **args) {
     processes[process_count].signal_received = -1;
     processes[process_count].end_time = 0;
     process_count++;
+    active_count++;
     printf("✅ Proceso %s lanzado con PID %d (start_time: %ld)\n", 
            executable, pid, processes[process_count-1].start_time);
   } else {
@@ -292,6 +316,7 @@ void shotdown_process() {
 
   if (running_processes == 0) {
     print_final_statistics();
+    cleanup();
     exit(0);
   }
 
@@ -339,11 +364,14 @@ void emergency_process() {
         printf(" Enviando SIGKILL a PID %d (%s)\n", processes[i].pid, processes[i].name);
         kill(processes[i].pid, SIGKILL);
         processes[i].status = 4; // force_terminated
+        processes[i].end_time = time(NULL);
+        processes[i].signal_received = 9;
       }
     }
   }
 
   print_final_statistics();
+  cleanup();
   exit(0);
 }
 
@@ -365,9 +393,9 @@ int main(int argc, char const *argv[])
   }
 
   set_buffer(); // No borrar
-  signal(SIGCHLD, signal_handler); // Configurar el handler de señales
-  signal(SIGALRM, timer_handler); // Configurar el timer
-  setup_timer(); // Configurar el timer
+  signal(SIGCHLD, signal_handler); 
+  signal(SIGALRM, timer_handler); 
+  setup_timer(); 
 
   printf("🔄 Sistema listo. Esperando comandos...\n\n");
 
@@ -396,18 +424,20 @@ int main(int argc, char const *argv[])
         printf("❌ ERROR: Debe especificar el tiempo en segundos\n");
       }
     } else if (string_equals(input[0], "shutdown")) {
+      free_user_input(input);
+      input = NULL;
       shotdown_process();
     } else if (string_equals(input[0], "emergency")) {
-      emergency_process();
-    } else if (string_equals(input[0], "exit")) {
-      printf("COMANDO EXIT\n");
       free_user_input(input);
-      break;
++     input = NULL;
+      emergency_process();
     } else {
       printf("❌ERROR: Comando no válido\n");
     }
-    free_user_input(input);
+    if (input) free_user_input(input);
   }
+
+  cleanup();
 
   return 0;
 }
