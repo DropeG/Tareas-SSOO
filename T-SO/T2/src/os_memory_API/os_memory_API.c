@@ -9,27 +9,71 @@ char* path;
 // funciones generales
 
 void mount_memory(char* path){
-    return 0;
+    // Guardar ruta global
+    memory_path = strdup(path);
+
+    // Abrir archivo binario en modo lectura/escritura
+    mem_file = fopen(memory_path, "rb+");
+    if (!mem_file) {
+        perror("Error al abrir memoria");
+        exit(1);
+    }
+
+    // Leer secciones en RAM
+    fseek(mem_file, OFF_PCB, SEEK_SET);
+    fread(pcb_table, 1, PCBS_SZ, mem_file);
+
+    fseek(mem_file, OFF_IPT, SEEK_SET);
+    fread(ipt, 1, IPT_SZ, mem_file);
+
+    fseek(mem_file, OFF_BITMAP, SEEK_SET);
+    fread(frame_bitmap, 1, BITMAP_SZ, mem_file);
+    return;
 }
 
 
 void list_processes(void){
-    return 0;
+    for (int i = 0; i < 32; i++) {
+        uint8_t estado = pcb_table[i * 256];
+        if (estado == 0x01) {
+            char name[15];
+            memcpy(name, &pcb_table[i * 256 + 1], 14);
+            name[14] = '\0';
+            uint8_t pid = pcb_table[i * 256 + 15];
+            printf("%d %s\n", pid, name);
+        }
+    }
+    return;
 }
 
 
-int processes_slots(void){
-    return 0;
+int processes_slots(){
+        int free = 0;
+    for (int i = 0; i < 32; i++) {
+        uint8_t estado = pcb_table[i * 256];
+        if (estado == 0x00){
+            free++;
+        }
+    }
+    return free;
 }
 
 
 void list_files(int process_id){
-    return 0;
+    return;
 }
 
 
-void frame_bitmap_status(void){
-    return 0;
+void frame_bitmap_status(){
+    int usados = 0;
+    for (int i = 0; i < NUM_FRAMES; i++) {
+        int byte = i / 8;
+        int bit = i % 8;
+        if (frame_bitmap[byte] & (1 << bit)){
+            usados++;
+        }
+    }
+    printf("USADOS: %d LIBRES: %d\n", usados, NUM_FRAMES - usados);
 }
 
 
@@ -77,12 +121,12 @@ int write_file(osmFile* file_desc, char* src){
 
 
 void delete_file(int process_id, char* file_name){
-    return 0;
+    return;
 }
 
 
 void close_file(osmFile* file_desc){
-    return 0;
+    return;
 }
 
 
