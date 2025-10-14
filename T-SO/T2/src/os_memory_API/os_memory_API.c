@@ -14,7 +14,7 @@ void mount_memory(char* path){
 
     // Abrir archivo binario en modo lectura/escritura
     mem_file = fopen(memory_path, "rb+");
-    if (!mem_file) {
+    if (!mem_file){
         perror("Error al abrir memoria");
         exit(1);
     }
@@ -32,10 +32,10 @@ void mount_memory(char* path){
 }
 
 
-void list_processes(void){
-    for (int i = 0; i < 32; i++) {
+void list_processes(){
+    for (int i = 0; i < 32; i++){
         uint8_t estado = pcb_table[i * 256];
-        if (estado == 0x01) {
+        if (estado == 0x01){
             char name[15];
             memcpy(name, &pcb_table[i * 256 + 1], 14);
             name[14] = '\0';
@@ -43,13 +43,12 @@ void list_processes(void){
             printf("%d %s\n", pid, name);
         }
     }
-    return;
 }
 
 
 int processes_slots(){
         int free = 0;
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 32; i++){
         uint8_t estado = pcb_table[i * 256];
         if (estado == 0x00){
             free++;
@@ -66,7 +65,7 @@ void list_files(int process_id){
 
 void frame_bitmap_status(){
     int usados = 0;
-    for (int i = 0; i < NUM_FRAMES; i++) {
+    for (int i = 0; i < NUM_FRAMES; i++){
         int byte = i / 8;
         int bit = i % 8;
         if (frame_bitmap[byte] & (1 << bit)){
@@ -92,7 +91,16 @@ int finish_process(int process_id){
 
 
 int clear_all_processes(void){
-    return 0;
+    int count = 0;
+    for (int i = 0; i < 32; i++){
+        if (pcb_table[i*256] == 0x01){
+            int pid = pcb_table[i*256+15];
+            if (finish_process(pid) == 0){
+                count++;
+            }
+        }
+    }
+    return count;
 }
 
 
@@ -126,9 +134,10 @@ void delete_file(int process_id, char* file_name){
 
 
 void close_file(osmFile* file_desc){
-    return;
+    if (file_desc){
+        free(file_desc);
+    }
 }
-
 
 
 // // bonus
